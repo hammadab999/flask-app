@@ -5,6 +5,8 @@ pipeline {
         REGISTRY = 'localhost:5000'
         IMAGE_NAME = 'flask-redis-app'
         IMAGE_TAG = 'latest'
+        CANARY_PORT = '8002'
+        MAIN_PORT = '8000'
     }
 
     stages {
@@ -32,14 +34,41 @@ pipeline {
             }
         }
 
-        stage('Deploy with Docker Compose') {
+        stage('Deploy Canary Version') {
             steps {
                 sh '''
-                cd /var/lib/jenkins/workspace/Flask-App
-                docker-compose down
-                docker-compose pull
-                docker-compose up -d
+                cd /var/lib/jenkins/workspace/Flask-App-Canary
+                docker-compose -f docker-compose-canary.yml down
+                docker-compose -f docker-compose-canary.yml pull
+                docker-compose -f docker-compose-canary.yml up -d
                 '''
+            }
+        }
+
+        stage('Test Canary Environment') {
+            steps {
+                // Access the Canary instance on CANARY_PORT (8002)
+                echo "Access the Canary environment at http://localhost:${env.CANARY_PORT}"
+                // Run tests or monitor canary deployment
+            }
+        }
+
+        stage('Promote Canary to Production') {
+            when {
+                expression { currentBuild.result == 'SUCCESS' }
+            }
+            steps {
+                echo "Switching internal traffic to the Canary version on port ${env.CANARY_PORT}"
+                // Optionally update the primary port if needed
+            }
+        }
+
+        stage('Rollback Canary Deployment') {
+            when {
+                expression { currentBuild.result == 'FAILURE' }
+            }
+            steps {
+                echo "Keep the main version running on port ${env.MAIN_PORT}"
             }
         }
     }
